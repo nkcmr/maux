@@ -35,14 +35,14 @@ func parseManifest(lg logger, filename string) (*manifest, error) {
 		lg:    lg.WithPrefix("manifest"),
 		rt:    newMauxLuaRuntime(lg),
 	}
-	m.rt.setDescribeHandler(m.describe)
+	m.rt.describeHandler = m.describe
 	return m, nil
 }
 
 func (m *manifest) reset() error {
 	m.details = map[string]string{}
 	m.rt = newMauxLuaRuntime(m.lg)
-	m.rt.setDescribeHandler(m.describe)
+	m.rt.describeHandler = m.describe
 	m.hasrun = false
 	return nil
 }
@@ -215,7 +215,10 @@ func newMauxLuaRuntime(lg logger) *mauxRuntime {
 			luaError(l, fmt.Errorf("invalid invocation of env_set(), expected 2 args, got %d", nargs))
 			return 0
 		}
-		key, val := "", ""
+		key, _ := l.ToString(1)
+		if key == "" {
+			// invocationError(l, "env_set", "expected non-empty string for argument 1, got", ...)
+		}
 		for i := 1; i <= 2; i++ {
 			str, ok := l.ToString(i)
 			if i == 1 {
@@ -241,6 +244,7 @@ func newMauxLuaRuntime(lg logger) *mauxRuntime {
 		}
 		k, ok := l.ToString(1)
 		if !ok {
+			invocationError(l, "env_get", "expected string, got %s", lua.TypeNameOf(l, 1))
 			luaError(l, fmt.Errorf("invalid invocation of env_get(), expected string, got %s", lua.TypeNameOf(l, 1)))
 		}
 		if e, ok := mrt.env[k]; ok {
@@ -253,9 +257,7 @@ func newMauxLuaRuntime(lg logger) *mauxRuntime {
 	return mrt
 }
 
-func (m *mauxRuntime) setDescribeHandler(dh func(map[string]string) error) {
-	m.describeHandler = dh
-}
+func invocationError(l *lua.State, fnname, problemFormat string, a ...interface{}) {}
 
 func luaError(l *lua.State, err error) {
 	l.PushString(fmt.Sprintf("error: %s", err))
